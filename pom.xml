@@ -11,6 +11,7 @@
     <description>
         Applies system environment variables to a list of files as given in package properties.
     </description>
+    <url>https://github.com/Netcentric/apply-system-env-install-hook</url>
 
     <licenses>
         <license>
@@ -19,6 +20,23 @@
             <distribution>repo</distribution>
         </license>
     </licenses>
+    
+
+    <developers>
+        <developer>
+            <name>Georg Henzler</name>
+            <email>georg.henzler@netcentric.biz</email>
+            <organization>Netcentric</organization>
+            <organizationUrl>http://www.netcentric.biz/</organizationUrl>
+        </developer>
+    </developers>
+
+    <scm>
+        <connection>scm:git:https://github.com/Netcentric/apply-system-env-install-hook.git</connection>
+        <developerConnection>scm:git:https://github.com/Netcentric/apply-system-env-install-hook.git</developerConnection>
+        <url>https://github.com/Netcentric/apply-system-env-install-hook.git</url>
+        <tag>HEAD</tag>
+    </scm>    
     
     <distributionManagement>
         <snapshotRepository>
