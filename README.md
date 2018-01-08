@@ -10,8 +10,6 @@ Replaces variables in content packages for files (e.g. useful for OSGi configura
 
 Variables can be in form `${myVar}` or  `${myVar:defaultVal}` - if the env var does not exist, for the first example `${myVar}` remains as is, for the second example `defaultVal` is used.
 
-Also see https://issues.apache.org/jira/browse/JCRVLT-254
-
 # Configuration
 
 ## Package Property applyEnvVarsForPaths
