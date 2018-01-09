@@ -25,6 +25,7 @@ import javax.jcr.PropertyIterator;
 import javax.jcr.PropertyType;
 import javax.jcr.RepositoryException;
 import javax.jcr.Session;
+import javax.jcr.Value;
 
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang.StringUtils;
@@ -46,8 +47,14 @@ import org.slf4j.LoggerFactory;
  * See README.md file for details. */
 public class ApplyEnvVarsInstallHook implements InstallHook {
 
-    private static final String TEMPLATE_SUFFIX = ".TEMPLATE";
     private static final Logger LOG = LoggerFactory.getLogger(ApplyEnvVarsInstallHook.class);
+
+    private static final String PROP_APPLY_ENV_VARS_FOR_PATHS = "applyEnvVarsForPaths";
+    private static final String TEMPLATE_SUFFIX = ".TEMPLATE";
+
+    private int countVarsReplaced = 0;
+    private int countVarsDefaultUsed = 0;
+    private int countVarsNotFound = 0;
 
     @Override
     public void execute(InstallContext context) throws PackageException {
@@ -63,21 +70,27 @@ public class ApplyEnvVarsInstallHook implements InstallHook {
             switch (context.getPhase()) {
                 case INSTALLED:
 
-                log("Package=" + vaultPackage, options);
-                String applyEnvVarsForPaths = vaultPackage.getProperties().getProperty("applyEnvVarsForPaths");
-                LOG.debug("applyEnvVarsForPaths={}", applyEnvVarsForPaths);
-                if (StringUtils.isBlank(applyEnvVarsForPaths)) {
-                    log("Install Hook " + getClass().getName()
-                            + " was configured but package property 'applyEnvVarsForPaths' was left blank", options);
-                    return;
+                log(getClass().getSimpleName() + " is active in " + vaultPackage.getId(), options);
+
+                List<String> jcrPathsToBeAdjusted = new ArrayList<String>();
+
+                String applyEnvVarsForPaths = vaultPackage.getProperties().getProperty(PROP_APPLY_ENV_VARS_FOR_PATHS);
+                LOG.debug("Property applyEnvVarsForPaths from package={}", applyEnvVarsForPaths);
+
+                if(StringUtils.isNotBlank(applyEnvVarsForPaths)) {
+                    jcrPathsToBeAdjusted.addAll(Arrays.asList(applyEnvVarsForPaths.trim().split("[\\s*,]+")));
                 }
-                List<String> jcrPathsToBeAdjusted = new ArrayList<String>(Arrays.asList(applyEnvVarsForPaths.trim().split("[\\s*,]+")));
 
                 collectTemplateNodes(vaultPackage, session, jcrPathsToBeAdjusted);
 
-                for (String jcrPathToBeAdjusted : jcrPathsToBeAdjusted) {
+                if (jcrPathsToBeAdjusted.isEmpty()) {
+                    log("Install Hook " + getClass().getName()
+                            + " was configured but package property 'applyEnvVarsForPaths' was left blank and no .TEMPLATE nodes were configured",
+                            options);
+                    return;
+                }
 
-                    log("Adjusting " + jcrPathToBeAdjusted + "...", options);
+                for (String jcrPathToBeAdjusted : jcrPathsToBeAdjusted) {
 
                     if (jcrPathToBeAdjusted.contains("@")) {
                         String[] pathAndProperty = jcrPathToBeAdjusted.split("@", 2);
@@ -99,7 +112,7 @@ public class ApplyEnvVarsInstallHook implements InstallHook {
                         if (isFile(nodeToBeAdjusted)) {
                             String fileContent = IOUtils.toString(JcrUtils.readFile(nodeToBeAdjusted));
 
-                            String adjustedFileContent = applyEnvVars(fileContent, env);
+                            String adjustedFileContent = applyEnvVars(fileContent, env, nodeToBeAdjusted.getPath(), options);
 
                             String targetNodeName;
                             if (isTemplateNode(nodeToBeAdjusted)) {
@@ -116,9 +129,10 @@ public class ApplyEnvVarsInstallHook implements InstallHook {
 
                             if (isTemplateNode(nodeToBeAdjusted)) {
                                 String targetPath = StringUtils.substringBeforeLast(nodeToBeAdjusted.getPath(), TEMPLATE_SUFFIX);
-                                // if (session.itemExists(targetPath)) {
-                                // session.removeItem(targetPath);
-                                // }
+                                if (session.itemExists(targetPath)) {
+                                    // ensure old properties get deleted
+                                    session.removeItem(targetPath);
+                                }
                                 nodeToBeAdjusted = copy(nodeToBeAdjusted, targetPath);
                             }
 
@@ -129,9 +143,15 @@ public class ApplyEnvVarsInstallHook implements InstallHook {
                     
                 }
 
-                log("Saving session...", options);
+                log("Values replaced: " + countVarsReplaced, options);
+                if (countVarsDefaultUsed > 0) {
+                    log("Default values used: " + countVarsDefaultUsed, options);
+                }
+                if (countVarsNotFound > 0) {
+                    log("WARN: No env variable found for var and no default given: " + countVarsNotFound, options);
+                }
                 session.save();
-                log(getClass().getSimpleName() + " done. ", options);
+                log("Saved session. ", options);
 
                 break;
             default:
@@ -158,7 +178,7 @@ public class ApplyEnvVarsInstallHook implements InstallHook {
             } else {
                 targetNode.setProperty(sourceProp.getName(), sourceProp.getValue(), sourceProp.getType());
             }
-            LOG.info("Copied {} / {} to {}", sourceProp.getName(), sourceProp.getType(), targetNode);
+            LOG.debug("Copied {} / {} to {}", sourceProp.getName(), sourceProp.getType(), targetNode);
 
         }
         NodeIterator nodesIt = sourceNode.getNodes();
@@ -187,9 +207,7 @@ public class ApplyEnvVarsInstallHook implements InstallHook {
         PropertyIterator propertiesIt = node.getProperties();
         while (propertiesIt.hasNext()) {
             Property prop = propertiesIt.nextProperty();
-            if (prop.getType() == PropertyType.STRING) {
-                adjustProperty(node.getSession(), node.getPath(), prop.getName(), env, options);
-            }
+            adjustProperty(node.getSession(), node.getPath(), prop.getName(), env, options);
         }
         NodeIterator nodesIt = node.getNodes();
         while (nodesIt.hasNext()) {
@@ -200,23 +218,36 @@ public class ApplyEnvVarsInstallHook implements InstallHook {
 
     private void adjustProperty(Session session, String path, String propertyName, Map<String, String> env, ImportOptions options)
             throws RepositoryException {
+        String propertyPath = path + "@" + propertyName;
         try {
-            LOG.info("Adjusting path {} prop {}", path, propertyName);
+            LOG.debug("Looking at path {} prop {}", path, propertyName);
             Node node = session.getNode(path);
             Property property = node.getProperty(propertyName);
             if (property.getDefinition().isProtected()) {
                 return;
             }
             if (property.getType() != PropertyType.STRING) {
-                log("Property " + path + "@" + propertyName + " is not of type String", options);
+                LOG.debug("Property " + propertyPath + " is not of type String", options);
                 return;
             }
-            String stringValueRaw = property.getString();
 
-            String adjustedValue = applyEnvVars(stringValueRaw, env);
-            property.setValue(adjustedValue);
+            if (!property.isMultiple()) {
+                String stringValueRaw = property.getString();
+                String adjustedValue = applyEnvVars(stringValueRaw, env, propertyPath, options);
+                property.setValue(adjustedValue);
+            } else {
+                List<Value> newValues = new ArrayList<Value>();
+                Value[] values = property.getValues();
+                for (int i = 0; i < values.length; i++) {
+                    String stringValueRaw = values[i].getString();
+                    String adjustedValue = applyEnvVars(stringValueRaw, env, propertyPath + "[" + i + "]", options);
+                    newValues.add(session.getValueFactory().createValue(adjustedValue));
+                }
+                property.setValue(newValues.toArray(new Value[newValues.size()]));
+            }
+
         } catch (PathNotFoundException e) {
-            log("Path " + path + " could not be found", options);
+            log("Path " + propertyPath + " could not be found", options);
         }
     }
 
@@ -243,10 +274,10 @@ public class ApplyEnvVarsInstallHook implements InstallHook {
             throws RepositoryException {
 
         String nodePath = node.getPath();
-        LOG.warn("nodePath={}", nodePath);
+        LOG.debug("nodePath={}", nodePath);
         if (nodePath.endsWith(TEMPLATE_SUFFIX) && workspaceFilter.covers(nodePath)) {
             jcrPathsToBeAdjusted.add(nodePath);
-            LOG.warn("found={}", nodePath);
+            LOG.debug("found={}", nodePath);
         }
 
         NodeIterator nodesIt = node.getNodes();
@@ -264,7 +295,7 @@ public class ApplyEnvVarsInstallHook implements InstallHook {
         return !covered;
     }
 
-    String applyEnvVars(String text, Map<String, String> env) {
+    String applyEnvVars(String text, Map<String, String> env, String path, ImportOptions options) {
 
         Pattern varPattern = Pattern.compile("\\$\\{([^\\}]+)\\}");
         Matcher matcher = varPattern.matcher(text);
@@ -272,21 +303,33 @@ public class ApplyEnvVarsInstallHook implements InstallHook {
         while (matcher.find()) {
             String givenVarAndDefault = matcher.group(1);
             String[] bits = givenVarAndDefault.split(":", 2);
-            String givenVar = bits[0].replaceAll("\\.", "_"); /*
-                                                               * there cannot be "." in env vars... if the files in the package have dots as
-                                                               * it is typically done, the env var can be provided with _ instead of dot
-                                                               */
-            String defaultVar = bits.length > 1 ? bits[1] : matcher.group(0) /*
-                                                                              * leave exactly what we matched as default if no default is
-                                                                              * given
-                                                                              */;
+
+            String varInFile = bits[0];
+            // there cannot be "." in env vars... if the files in the package have dots as it is typically done, the env var can be provided
+            // with _ instead of dot
+            String effectiveVar = varInFile.replaceAll("\\.", "_");
 
             String valueToBeUsed;
-            if (env.containsKey(givenVar)) {
-                valueToBeUsed = env.get(givenVar);
+            String action;
+            if (env.containsKey(effectiveVar)) {
+                valueToBeUsed = env.get(effectiveVar);
+                countVarsReplaced++;
+                action = "replaced from env";
             } else {
+                String defaultVar;
+                if(bits.length > 1) {
+                    defaultVar = bits[1];
+                    countVarsDefaultUsed++;
+                    action = "default in package";
+                } else {
+                    // leave exactly what we matched as default if no default is given
+                    defaultVar = matcher.group(0);
+                    countVarsNotFound++;
+                    action = "env var not found, no default provided!";
+                }
                 valueToBeUsed = defaultVar;
             }
+            log(path.replace(TEMPLATE_SUFFIX, "") + ": " + varInFile + "=\"" + valueToBeUsed + "\" (" + action + ")", options);
             matcher.appendReplacement(result, Matcher.quoteReplacement(valueToBeUsed));
         }
         matcher.appendTail(result);
