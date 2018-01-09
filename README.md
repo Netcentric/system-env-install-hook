@@ -48,7 +48,7 @@ Ensure the hook ins copied into the package:
                         <artifactItem>
                             <groupId>biz.netcentric.aem</groupId>
                             <artifactId>apply-system-env-install-hook</artifactId>
-                            <version>1.0.1-SNAPSHOT</version>
+                            <version>1.0.1</version>
                         </artifactItem>
                     </artifactItems>
                     <outputDirectory>${project.build.directory}/vault-work/META-INF/vault/hooks</outputDirectory>
