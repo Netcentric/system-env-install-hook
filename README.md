@@ -48,7 +48,7 @@ Ensure the hook ins copied into the package:
                         <artifactItem>
                             <groupId>biz.netcentric.aem</groupId>
                             <artifactId>apply-system-env-install-hook</artifactId>
-                            <version>1.0.1</version>
+                            <version>1.0.2</version>
                         </artifactItem>
                     </artifactItems>
                     <outputDirectory>${project.build.directory}/vault-work/META-INF/vault/hooks</outputDirectory>
@@ -72,11 +72,14 @@ Configure it via vault package properties:
             <group>Netcentric</group>
             <filterSource>src/main/META-INF/vault/filter.xml</filterSource>
             <properties>
+                <!-- paths to adjust, can be left out if '.TEMPLATE' paths are used -->
                 <applyEnvVarsForPaths>
                     /etc/path/to/node/jcr:content@testValue,
                     /etc/path/to/node/jcr:content@testValueOther,
                     /etc/path/to/configfile/com.example.MyService.config
                 </applyEnvVarsForPaths>
+                <!-- default is false -->
+                <failForMissingEnvVars>true</failForMissingEnvVars> 
             </properties>                    
             <targetURL>http://${crx.host}:${crx.port}/crx/packmgr/service.jsp</targetURL>
         </configuration>
