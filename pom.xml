@@ -5,7 +5,7 @@
     <groupId>biz.netcentric.aem</groupId>
     <artifactId>apply-system-env-install-hook</artifactId>
     <packaging>jar</packaging>
-    <version>1.0.2-SNAPSHOT</version>
+    <version>1.0.3-SNAPSHOT</version>
 
     <name>Apply System Env Install Hook</name>
     <description>
