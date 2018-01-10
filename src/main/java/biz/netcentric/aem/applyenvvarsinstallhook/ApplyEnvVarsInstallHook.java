@@ -10,8 +10,11 @@ package biz.netcentric.aem.applyenvvarsinstallhook;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.StringWriter;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
@@ -34,6 +37,8 @@ import org.apache.jackrabbit.commons.JcrUtils;
 import org.apache.jackrabbit.vault.fs.api.PathFilterSet;
 import org.apache.jackrabbit.vault.fs.api.ProgressTrackerListener;
 import org.apache.jackrabbit.vault.fs.api.WorkspaceFilter;
+import org.apache.jackrabbit.vault.fs.io.Archive;
+import org.apache.jackrabbit.vault.fs.io.Archive.Entry;
 import org.apache.jackrabbit.vault.fs.io.ImportOptions;
 import org.apache.jackrabbit.vault.packaging.InstallContext;
 import org.apache.jackrabbit.vault.packaging.InstallHook;
@@ -50,6 +55,7 @@ public class ApplyEnvVarsInstallHook implements InstallHook {
     private static final Logger LOG = LoggerFactory.getLogger(ApplyEnvVarsInstallHook.class);
 
     private static final String PROP_APPLY_ENV_VARS_FOR_PATHS = "applyEnvVarsForPaths";
+    private static final String PROP_FAIL_FOR_MISSING_ENV_VARS = "failForMissingEnvVars";
     private static final String TEMPLATE_SUFFIX = ".TEMPLATE";
 
     private int countVarsReplaced = 0;
@@ -68,16 +74,34 @@ public class ApplyEnvVarsInstallHook implements InstallHook {
             Map<String, String> env = System.getenv();
 
             switch (context.getPhase()) {
-                case INSTALLED:
-
+            case PREPARE:
                 log(getClass().getSimpleName() + " is active in " + vaultPackage.getId(), options);
+
+                boolean failForMissingEnvVar = Boolean.valueOf(vaultPackage.getProperties().getProperty(PROP_FAIL_FOR_MISSING_ENV_VARS));
+                LOG.debug("Property failForMissingEnvVar from package={}", failForMissingEnvVar);
+
+                if (failForMissingEnvVar) {
+                    log(getClass().getSimpleName() + " checking if all env vars are set due to package property failForMissingEnvVar=true",
+                            options);
+
+                    Archive archive = vaultPackage.getArchive();
+                    boolean allVariablesFoundInEnv = findMissingEnvVarInPackageEntry(archive, "/", archive.getJcrRoot(), options);
+                    if (!allVariablesFoundInEnv) {
+                        String errMsg = "Aborting installation of package " + vaultPackage.getId() + " due to missing env variables";
+                        log(errMsg, options);
+                        throw new PackageException(errMsg);
+                    }
+                }
+                break;
+
+            case INSTALLED:
 
                 List<String> jcrPathsToBeAdjusted = new ArrayList<String>();
 
                 String applyEnvVarsForPaths = vaultPackage.getProperties().getProperty(PROP_APPLY_ENV_VARS_FOR_PATHS);
                 LOG.debug("Property applyEnvVarsForPaths from package={}", applyEnvVarsForPaths);
 
-                if(StringUtils.isNotBlank(applyEnvVarsForPaths)) {
+                if (StringUtils.isNotBlank(applyEnvVarsForPaths)) {
                     jcrPathsToBeAdjusted.addAll(Arrays.asList(applyEnvVarsForPaths.trim().split("[\\s*,]+")));
                 }
 
@@ -161,6 +185,8 @@ public class ApplyEnvVarsInstallHook implements InstallHook {
             throw new PackageException("Could not execute install hook to apply env vars: " + e, e);
         }
     }
+
+
 
 
     // not using workspace.copy() because that method saves immediately
@@ -297,39 +323,32 @@ public class ApplyEnvVarsInstallHook implements InstallHook {
 
     String applyEnvVars(String text, Map<String, String> env, String path, ImportOptions options) {
 
-        Pattern varPattern = Pattern.compile("\\$\\{([^\\}]+)\\}");
-        Matcher matcher = varPattern.matcher(text);
+        Matcher matcher = EnvVarDeclaration.VAR_PATTERN.matcher(text);
         StringBuffer result = new StringBuffer();
         while (matcher.find()) {
-            String givenVarAndDefault = matcher.group(1);
-            String[] bits = givenVarAndDefault.split(":", 2);
-
-            String varInFile = bits[0];
-            // there cannot be "." in env vars... if the files in the package have dots as it is typically done, the env var can be provided
-            // with _ instead of dot
-            String effectiveVar = varInFile.replaceAll("\\.", "_");
+            EnvVarDeclaration envVar = new EnvVarDeclaration(matcher.group(1));
 
             String valueToBeUsed;
             String action;
-            if (env.containsKey(effectiveVar)) {
-                valueToBeUsed = env.get(effectiveVar);
+            if (env.containsKey(envVar.effectiveName)) {
+                valueToBeUsed = env.get(envVar.effectiveName);
                 countVarsReplaced++;
                 action = "replaced from env";
             } else {
-                String defaultVar;
-                if(bits.length > 1) {
-                    defaultVar = bits[1];
+                String effectiveDefaultVal;
+                if (envVar.defaultVal != null) {
+                    effectiveDefaultVal = envVar.defaultVal;
                     countVarsDefaultUsed++;
                     action = "default in package";
                 } else {
                     // leave exactly what we matched as default if no default is given
-                    defaultVar = matcher.group(0);
+                    effectiveDefaultVal = matcher.group(0);
                     countVarsNotFound++;
                     action = "env var not found, no default provided!";
                 }
-                valueToBeUsed = defaultVar;
+                valueToBeUsed = effectiveDefaultVal;
             }
-            log(path.replace(TEMPLATE_SUFFIX, "") + ": " + varInFile + "=\"" + valueToBeUsed + "\" (" + action + ")", options);
+            log(path.replace(TEMPLATE_SUFFIX, "") + ": " + envVar.name + "=\"" + valueToBeUsed + "\" (" + action + ")", options);
             matcher.appendReplacement(result, Matcher.quoteReplacement(valueToBeUsed));
         }
         matcher.appendTail(result);
@@ -346,4 +365,76 @@ public class ApplyEnvVarsInstallHook implements InstallHook {
         }
     }
 
+    private static class EnvVarDeclaration {
+        private static final Pattern VAR_PATTERN = Pattern.compile("\\$\\{([^\\}]+)\\}");
+
+        private String name;
+        private String effectiveName;
+        private String defaultVal;
+
+        EnvVarDeclaration(String groupOneOfMatcher) {
+            String givenVarAndDefault = groupOneOfMatcher;
+            String[] bits = givenVarAndDefault.split(":", 2);
+
+            name = bits[0];
+            // there cannot be "." in env vars... if the files in the package have dots as it is typically done, the env var can be provided
+            // with _ instead of dot
+            effectiveName = name.replaceAll("\\.", "_");
+            if (bits.length > 1) {
+                defaultVal = bits[1];
+            } else {
+                defaultVal = null;
+            }
+        }
+
+    }
+
+    private boolean findMissingEnvVarInPackageEntry(Archive archive, String parentPath, Entry entry, ImportOptions options) {
+
+        String path = parentPath + "/" + entry.getName();
+        boolean result = true;
+        if (!entry.isDirectory()) {
+
+            String fileContent = null;
+
+            LOG.debug("Reading file {}", path);
+            try {
+                InputStream input = archive.getInputSource(entry).getByteStream();
+                if (input == null) {
+                    throw new IllegalStateException("Could not get input stream from entry " + path);
+                }
+                StringWriter writer = new StringWriter();
+                IOUtils.copy(input, writer, "UTF-8");
+                fileContent = writer.toString();
+            } catch (Exception e) {
+                log("Could not read " + path + " as text, skipping (" + e + ")", options);
+
+            }
+
+            if (fileContent != null) {
+                Map<String, String> systemEnv = System.getenv();
+                Matcher matcher = EnvVarDeclaration.VAR_PATTERN.matcher(fileContent);
+                while (matcher.find()) {
+                    EnvVarDeclaration envVar = new EnvVarDeclaration(matcher.group(1));
+
+                    if (envVar.defaultVal != null) {
+                        LOG.debug("Default value given for variable {}", envVar);
+                        continue;
+                    }
+                    if (!systemEnv.containsKey(envVar.effectiveName)) {
+                        log("Env Variable '" + envVar.effectiveName + "' is not found but ${" + envVar.name + "} is used in file " + path
+                                + " without declaring a default", options);
+                        result = false;
+                    }
+                }
+            }
+        }
+
+        Collection<? extends Entry> children = entry.getChildren();
+        for (Entry subEntry : children) {
+            result &= findMissingEnvVarInPackageEntry(archive, path, subEntry, options);
+        }
+
+        return result;
+    }
 }

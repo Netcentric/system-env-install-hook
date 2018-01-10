@@ -5,7 +5,7 @@
     <groupId>biz.netcentric.aem</groupId>
     <artifactId>apply-system-env-install-hook</artifactId>
     <packaging>jar</packaging>
-    <version>1.0.1</version>
+    <version>1.0.2</version>
 
     <name>Apply System Env Install Hook</name>
     <description>
@@ -15,12 +15,11 @@
 
     <licenses>
         <license>
-            <name>The Apache Software License, Version 2.0</name>
-            <url>http://www.apache.org/licenses/LICENSE-2.0.txt</url>
+            <name>Eclipse Public License, Version 1.0</name>
+            <url>https://www.eclipse.org/legal/epl-v10.html</url>
             <distribution>repo</distribution>
         </license>
     </licenses>
-    
 
     <developers>
         <developer>
@@ -170,6 +169,11 @@
 
         <profile>
             <id>release</id>
+            <activation>
+                <property>
+                    <name>performRelease</name>
+                </property>
+            </activation>
             <build>
                 <plugins>
                     <plugin>
