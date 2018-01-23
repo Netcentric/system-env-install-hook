@@ -2,7 +2,7 @@ Apply Env Install Hook for AEM/CRX
 ================================================
 
 **DISCLAIMER:**
-This hook should be used sparsely for very limited use cases only. Almost all OSGi configurations should be bound to runmodes as well-established mechanism to configure different environments. Also, in terms of majority, this project is in incubator status while the approach is being validated. 
+This hook should be used sparsely for very limited use cases only. Almost all OSGi configurations should be bound to runmodes as well-established mechanism to configure different environments. Also, in terms of maturity, this project is in incubator status while the approach is being validated. 
 
 # Overview
 
