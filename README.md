@@ -63,6 +63,7 @@ zkCli.sh set /configs/aem-env.properties "`cat aem-env.properties`"
 
 If the source `ZooKeeper` is configured in package, but `applysysenv.zookeeper.hosts` or `applysysenv.zookeeper.path` is not set, a warning is logged an the source will not provide any values.
 
+Also, for this source to work the zookeeper jar has to be put in crx-quickstart/install (or be installed via a different means).
 
 ### Source "SystemProperties"
 
