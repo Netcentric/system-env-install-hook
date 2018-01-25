@@ -71,7 +71,7 @@
                 <configuration>
                     <archive>
                         <manifest>
-                            <mainClass>biz.netcentric.aem.applyenvvarsinstallhook.ApplyEnvVarsInstallHook</mainClass>
+                            <mainClass>biz.netcentric.aem.applysystemenvinstallhook.ApplySystemEnvInstallHook</mainClass>
                         </manifest>
                     </archive>
                 </configuration>
@@ -149,6 +149,18 @@
             <artifactId>commons-io</artifactId>
             <version>2.4</version>
         </dependency>                   
+
+        <dependency>
+            <groupId>commons-io</groupId>
+            <artifactId>commons-io</artifactId>
+            <version>2.4</version>
+        </dependency>                   
+        <dependency>
+            <groupId>org.apache.zookeeper</groupId>
+            <artifactId>zookeeper</artifactId>
+            <version>3.4.10</version>
+            <optional>true</optional>
+        </dependency>
 
         <!-- Test Dependencies -->
         <dependency>
