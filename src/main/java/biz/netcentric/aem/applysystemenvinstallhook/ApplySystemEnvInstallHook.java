@@ -6,7 +6,7 @@
  * which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v10.html
  */
-package biz.netcentric.aem.applyenvvarsinstallhook;
+package biz.netcentric.aem.applysystemenvinstallhook;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -16,9 +16,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
-import java.util.Map;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 import javax.jcr.Node;
 import javax.jcr.NodeIterator;
@@ -35,7 +32,6 @@ import org.apache.commons.lang.StringUtils;
 import org.apache.jackrabbit.JcrConstants;
 import org.apache.jackrabbit.commons.JcrUtils;
 import org.apache.jackrabbit.vault.fs.api.PathFilterSet;
-import org.apache.jackrabbit.vault.fs.api.ProgressTrackerListener;
 import org.apache.jackrabbit.vault.fs.api.WorkspaceFilter;
 import org.apache.jackrabbit.vault.fs.io.Archive;
 import org.apache.jackrabbit.vault.fs.io.Archive.Entry;
@@ -47,20 +43,28 @@ import org.apache.jackrabbit.vault.packaging.VaultPackage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import biz.netcentric.aem.applysystemenvinstallhook.VariablesSource.NamedValue;
+import biz.netcentric.aem.applysystemenvinstallhook.sources.JcrVarsSource;
+import biz.netcentric.aem.applysystemenvinstallhook.sources.OsEnvVarsSource;
+import biz.netcentric.aem.applysystemenvinstallhook.sources.SystemPropertiesVarsSource;
+
 /** Applies environment variables to content in package - this works for both text files and properties of nodes.
  * 
  * See README.md file for details. */
-public class ApplyEnvVarsInstallHook implements InstallHook {
+public class ApplySystemEnvInstallHook implements InstallHook {
 
-    private static final Logger LOG = LoggerFactory.getLogger(ApplyEnvVarsInstallHook.class);
+    private static final Logger LOG = LoggerFactory.getLogger(ApplySystemEnvInstallHook.class);
 
-    private static final String PROP_APPLY_ENV_VARS_FOR_PATHS = "applyEnvVarsForPaths";
+    private static final String PROP_APPLY_ENV_SOURCES = "applySystemEnvSources";
+
+    private static final String PROP_APPLY_SYSTEM_ENV_FOR_PATHS = "applySystemEnvForPaths";
     private static final String PROP_FAIL_FOR_MISSING_ENV_VARS = "failForMissingEnvVars";
-    private static final String TEMPLATE_SUFFIX = ".TEMPLATE";
 
-    private int countVarsReplaced = 0;
-    private int countVarsDefaultUsed = 0;
-    private int countVarsNotFound = 0;
+    public static final String TEMPLATE_SUFFIX = ".TEMPLATE";
+
+    private InstallHookLogger logger = new InstallHookLogger();
+    private VariablesMerger variablesMerger = new VariablesMerger(logger);
+    private static VariablesSource variablesSource = null;
 
     @Override
     public void execute(InstallContext context) throws PackageException {
@@ -68,27 +72,31 @@ public class ApplyEnvVarsInstallHook implements InstallHook {
 
             final Session session = context.getSession();
             ImportOptions options = context.getOptions();
+            logger.setOptions(options);
             VaultPackage vaultPackage = context.getPackage();
             WorkspaceFilter filter = vaultPackage.getMetaInf().getFilter();
 
-            Map<String, String> env = System.getenv();
+
 
             switch (context.getPhase()) {
             case PREPARE:
-                log(getClass().getSimpleName() + " is active in " + vaultPackage.getId(), options);
+                logger.log(getClass().getSimpleName() + " is active in " + vaultPackage.getId());
+
+                logger.log("Loading variable sources... ");
+                variablesSource = getVariablesSource(context);
 
                 boolean failForMissingEnvVar = Boolean.valueOf(vaultPackage.getProperties().getProperty(PROP_FAIL_FOR_MISSING_ENV_VARS));
                 LOG.debug("Property failForMissingEnvVar from package={}", failForMissingEnvVar);
 
                 if (failForMissingEnvVar) {
-                    log(getClass().getSimpleName() + " checking if all env vars are set due to package property failForMissingEnvVar=true",
-                            options);
+                    logger.log(getClass().getSimpleName()
+                            + " checking if all env vars are set due to package property failForMissingEnvVar=true");
 
                     Archive archive = vaultPackage.getArchive();
                     boolean allVariablesFoundInEnv = findMissingEnvVarInPackageEntry(archive, "/", archive.getJcrRoot(), options);
                     if (!allVariablesFoundInEnv) {
                         String errMsg = "Aborting installation of package " + vaultPackage.getId() + " due to missing env variables";
-                        log(errMsg, options);
+                        logger.log(errMsg);
                         throw new PackageException(errMsg);
                     }
                 }
@@ -96,9 +104,15 @@ public class ApplyEnvVarsInstallHook implements InstallHook {
 
             case INSTALLED:
 
+                if (variablesSource == null) {
+                    String msg = "Sources as set in prepare phase are not available in INSTALLED phase anymore";
+                    LOG.error(msg);
+                    throw new IllegalStateException(msg);
+                }
+
                 List<String> jcrPathsToBeAdjusted = new ArrayList<String>();
 
-                String applyEnvVarsForPaths = vaultPackage.getProperties().getProperty(PROP_APPLY_ENV_VARS_FOR_PATHS);
+                String applyEnvVarsForPaths = vaultPackage.getProperties().getProperty(PROP_APPLY_SYSTEM_ENV_FOR_PATHS);
                 LOG.debug("Property applyEnvVarsForPaths from package={}", applyEnvVarsForPaths);
 
                 if (StringUtils.isNotBlank(applyEnvVarsForPaths)) {
@@ -108,9 +122,8 @@ public class ApplyEnvVarsInstallHook implements InstallHook {
                 collectTemplateNodes(vaultPackage, session, jcrPathsToBeAdjusted);
 
                 if (jcrPathsToBeAdjusted.isEmpty()) {
-                    log("Install Hook " + getClass().getName()
-                            + " was configured but package property 'applyEnvVarsForPaths' was left blank and no .TEMPLATE nodes were configured",
-                            options);
+                    logger.log("Install Hook " + getClass().getName()
+                            + " was configured but package property 'applyEnvVarsForPaths' was left blank and no .TEMPLATE nodes were configured");
                     return;
                 }
 
@@ -125,7 +138,7 @@ public class ApplyEnvVarsInstallHook implements InstallHook {
 
                         String propertyName = pathAndProperty[1];
 
-                        adjustProperty(session, path, propertyName, env, options);
+                        adjustProperty(session, path, propertyName, variablesSource, options);
                     } else {
                         if (isNotCoveredbyFilter(filter, jcrPathToBeAdjusted, options)) {
                             continue;
@@ -136,7 +149,7 @@ public class ApplyEnvVarsInstallHook implements InstallHook {
                         if (isFile(nodeToBeAdjusted)) {
                             String fileContent = IOUtils.toString(JcrUtils.readFile(nodeToBeAdjusted));
 
-                            String adjustedFileContent = applyEnvVars(fileContent, env, nodeToBeAdjusted.getPath(), options);
+                            String adjustedFileContent = variablesMerger.applyEnvVars(fileContent, variablesSource, nodeToBeAdjusted.getPath());
 
                             String targetNodeName;
                             if (isTemplateNode(nodeToBeAdjusted)) {
@@ -161,21 +174,21 @@ public class ApplyEnvVarsInstallHook implements InstallHook {
                             }
 
                             // adjust all string properties of node
-                            adjustAllPropertiesOfNodeTree(nodeToBeAdjusted, env, options);
+                            adjustAllPropertiesOfNodeTree(nodeToBeAdjusted, variablesSource, options);
                         }
                     }
                     
                 }
 
-                log("Values replaced: " + countVarsReplaced, options);
-                if (countVarsDefaultUsed > 0) {
-                    log("Default values used: " + countVarsDefaultUsed, options);
+                logger.log("Values replaced: " + variablesMerger.getCountVarsReplaced());
+                if (variablesMerger.getCountVarsDefaultUsed() > 0) {
+                    logger.log("Default values used: " + variablesMerger.getCountVarsDefaultUsed());
                 }
-                if (countVarsNotFound > 0) {
-                    log("WARN: No env variable found for var and no default given: " + countVarsNotFound, options);
+                if (variablesMerger.getCountVarsNotFound() > 0) {
+                    logger.log("WARN: No env variable found for var and no default given: " + variablesMerger.getCountVarsNotFound());
                 }
                 session.save();
-                log("Saved session. ", options);
+                logger.log("Saved session. ");
 
                 break;
             default:
@@ -186,7 +199,20 @@ public class ApplyEnvVarsInstallHook implements InstallHook {
         }
     }
 
+    private VariablesSource getVariablesSource(InstallContext context) {
+        String applySystemEnvSources = context.getPackage().getProperties().getProperty(PROP_APPLY_ENV_SOURCES);
+        List<String> sourceNames;
+        if (StringUtils.isNotBlank(applySystemEnvSources)) {
+            LOG.debug("Property applySystemEnvSources from package={}", applySystemEnvSources);
+            sourceNames = Arrays.asList(applySystemEnvSources.split(" *, *"));
+        } else {
+            sourceNames = Arrays.asList(SystemPropertiesVarsSource.NAME, JcrVarsSource.NAME, OsEnvVarsSource.NAME);
+        }
+        logger.log("Using sources [" + StringUtils.join(sourceNames, ", ") + "]");
 
+        VariablesSource env = CombinedVariablesSource.forSources(sourceNames, logger, context);
+        return env;
+    }
 
 
     // not using workspace.copy() because that method saves immediately
@@ -228,7 +254,7 @@ public class ApplyEnvVarsInstallHook implements InstallHook {
         return isFile;
     }
 
-    private void adjustAllPropertiesOfNodeTree(Node node, Map<String, String> env, ImportOptions options)
+    private void adjustAllPropertiesOfNodeTree(Node node, VariablesSource env, ImportOptions options)
             throws RepositoryException {
         PropertyIterator propertiesIt = node.getProperties();
         while (propertiesIt.hasNext()) {
@@ -242,7 +268,7 @@ public class ApplyEnvVarsInstallHook implements InstallHook {
         }
     }
 
-    private void adjustProperty(Session session, String path, String propertyName, Map<String, String> env, ImportOptions options)
+    private void adjustProperty(Session session, String path, String propertyName, VariablesSource env, ImportOptions options)
             throws RepositoryException {
         String propertyPath = path + "@" + propertyName;
         try {
@@ -253,27 +279,27 @@ public class ApplyEnvVarsInstallHook implements InstallHook {
                 return;
             }
             if (property.getType() != PropertyType.STRING) {
-                LOG.debug("Property " + propertyPath + " is not of type String", options);
+                LOG.debug("Property " + propertyPath + " is not of type String");
                 return;
             }
 
             if (!property.isMultiple()) {
                 String stringValueRaw = property.getString();
-                String adjustedValue = applyEnvVars(stringValueRaw, env, propertyPath, options);
+                String adjustedValue = variablesMerger.applyEnvVars(stringValueRaw, env, propertyPath);
                 property.setValue(adjustedValue);
             } else {
                 List<Value> newValues = new ArrayList<Value>();
                 Value[] values = property.getValues();
                 for (int i = 0; i < values.length; i++) {
                     String stringValueRaw = values[i].getString();
-                    String adjustedValue = applyEnvVars(stringValueRaw, env, propertyPath + "[" + i + "]", options);
+                    String adjustedValue = variablesMerger.applyEnvVars(stringValueRaw, env, propertyPath + "[" + i + "]");
                     newValues.add(session.getValueFactory().createValue(adjustedValue));
                 }
                 property.setValue(newValues.toArray(new Value[newValues.size()]));
             }
 
         } catch (PathNotFoundException e) {
-            log("Path " + propertyPath + " could not be found", options);
+            logger.log("Path " + propertyPath + " could not be found");
         }
     }
 
@@ -316,77 +342,9 @@ public class ApplyEnvVarsInstallHook implements InstallHook {
     private boolean isNotCoveredbyFilter(WorkspaceFilter filter, String path, ImportOptions options) {
         boolean covered = filter.covers(path);
         if (!covered) {
-            log("Path " + path + " is not covered by filter \n" + filter.getSourceAsString(), options);
+            logger.log("Path " + path + " is not covered by filter \n" + filter.getSourceAsString());
         }
         return !covered;
-    }
-
-    String applyEnvVars(String text, Map<String, String> env, String path, ImportOptions options) {
-
-        Matcher matcher = EnvVarDeclaration.VAR_PATTERN.matcher(text);
-        StringBuffer result = new StringBuffer();
-        while (matcher.find()) {
-            EnvVarDeclaration envVar = new EnvVarDeclaration(matcher.group(1));
-
-            String valueToBeUsed;
-            String action;
-            if (env.containsKey(envVar.effectiveName)) {
-                valueToBeUsed = env.get(envVar.effectiveName);
-                countVarsReplaced++;
-                action = "replaced from env";
-            } else {
-                String effectiveDefaultVal;
-                if (envVar.defaultVal != null) {
-                    effectiveDefaultVal = envVar.defaultVal;
-                    countVarsDefaultUsed++;
-                    action = "default in package";
-                } else {
-                    // leave exactly what we matched as default if no default is given
-                    effectiveDefaultVal = matcher.group(0);
-                    countVarsNotFound++;
-                    action = "env var not found, no default provided!";
-                }
-                valueToBeUsed = effectiveDefaultVal;
-            }
-            log(path.replace(TEMPLATE_SUFFIX, "") + ": " + envVar.name + "=\"" + valueToBeUsed + "\" (" + action + ")", options);
-            matcher.appendReplacement(result, Matcher.quoteReplacement(valueToBeUsed));
-        }
-        matcher.appendTail(result);
-        return result.toString();
-    }
-
-    public void log(String message, ImportOptions options) {
-        ProgressTrackerListener listener = options.getListener();
-        if (listener != null) {
-            listener.onMessage(ProgressTrackerListener.Mode.TEXT, message, "");
-            LOG.debug(message);
-        } else {
-            LOG.info(message);
-        }
-    }
-
-    private static class EnvVarDeclaration {
-        private static final Pattern VAR_PATTERN = Pattern.compile("\\$\\{([^\\}]+)\\}");
-
-        private String name;
-        private String effectiveName;
-        private String defaultVal;
-
-        EnvVarDeclaration(String groupOneOfMatcher) {
-            String givenVarAndDefault = groupOneOfMatcher;
-            String[] bits = givenVarAndDefault.split(":", 2);
-
-            name = bits[0];
-            // there cannot be "." in env vars... if the files in the package have dots as it is typically done, the env var can be provided
-            // with _ instead of dot
-            effectiveName = name.replaceAll("\\.", "_");
-            if (bits.length > 1) {
-                defaultVal = bits[1];
-            } else {
-                defaultVal = null;
-            }
-        }
-
     }
 
     private boolean findMissingEnvVarInPackageEntry(Archive archive, String parentPath, Entry entry, ImportOptions options) {
@@ -407,26 +365,28 @@ public class ApplyEnvVarsInstallHook implements InstallHook {
                 IOUtils.copy(input, writer, "UTF-8");
                 fileContent = writer.toString();
             } catch (Exception e) {
-                log("Could not read " + path + " as text, skipping (" + e + ")", options);
+                logger.log("Could not read " + path + " as text, skipping (" + e + ")");
 
             }
 
             if (fileContent != null) {
-                Map<String, String> systemEnv = System.getenv();
-                Matcher matcher = EnvVarDeclaration.VAR_PATTERN.matcher(fileContent);
-                while (matcher.find()) {
-                    EnvVarDeclaration envVar = new EnvVarDeclaration(matcher.group(1));
+
+                List<VariablesMerger.EnvVarDeclaration> envVarDeclarations = variablesMerger.getEnvVarDeclarations(fileContent);
+                for (VariablesMerger.EnvVarDeclaration envVar : envVarDeclarations) {
 
                     if (envVar.defaultVal != null) {
                         LOG.debug("Default value given for variable {}", envVar);
                         continue;
                     }
-                    if (!systemEnv.containsKey(envVar.effectiveName)) {
-                        log("Env Variable '" + envVar.effectiveName + "' is not found but ${" + envVar.name + "} is used in file " + path
-                                + " without declaring a default", options);
+                    NamedValue varEntry = variablesSource.get(envVar.name);
+                    if (varEntry == null) {
+                        logger.log("Variable '" + envVar.name + "' is not found is used in file "
+                                + path
+                                + " without declaring a default and it could not be found in sources: " + variablesSource.getName());
                         result = false;
                     }
                 }
+
             }
         }
 
