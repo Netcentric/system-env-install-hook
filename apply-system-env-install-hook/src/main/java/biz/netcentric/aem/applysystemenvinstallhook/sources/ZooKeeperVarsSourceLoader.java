@@ -24,8 +24,8 @@ class ZooKeeperVarsSourceLoader {
         ZooKeeper zk = connect(zooKeeperHosts);
         byte[] data = new byte[0];
         try {
-            Stat exists = zk.exists(zooKeeperPath, false);
-            data = zk.getData(zooKeeperPath, false, exists);
+            Stat exists = zk.exists(zooKeeperPath, true);
+            data = zk.getData(zooKeeperPath, true, exists);
         } finally {
             zk.close();
         }

@@ -52,7 +52,7 @@ public class JcrVarsSource extends VariablesSource {
             }
 
         } catch (PathNotFoundException e) {
-            logger.log(LOG, "Node" + JCR_CONFIG_PATH + " does not exist");
+            logger.log(LOG, "Node " + JCR_CONFIG_PATH + " does not exist");
         } catch (Exception e) {
             logger.logError(LOG, "Could not load variables from " + JCR_CONFIG_PATH + ": " + e, e);
         }
