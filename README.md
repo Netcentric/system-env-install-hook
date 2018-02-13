@@ -14,6 +14,10 @@ Variables can be in form `${myVar}` or  `${myVar:defaultVal}` - if the var can n
 
 ## Including variables in packages
 
+### Nodes with suffix .TEMPLATE
+
+Additionally to nodes that explictly configured to be adjusted, any nodes that end with `.TEMPLATE` will be moved to the same name without `.TEMPLATE` (e.g. `/etc/path/to/configfile/com.example.MyService.config.TEMPLATE` will be moved to `/etc/path/to/configfile/com.example.MyService.config` with the values replaced). This can be useful to avoid a "double-save" (first one on package installation itself, second one on install hook phase `INSTALLED`). To avoid that a configuration is deleted upon regular package installation, the target node (without `.TEMPLATE`) has to be excluded via exclude rule of filter statement.
+
 ### Package Property applyEnvVarsForPaths
 
 The vault package property `applyEnvVarsForPaths` can be given to explicitly list properties and files where the replacement shall take place:
@@ -25,10 +29,6 @@ The vault package property `applyEnvVarsForPaths` can be given to explicitly lis
 ```
 
 Multiple values can be given separated by whitespace and/or comma.
-
-### Nodes with suffix .TEMPLATE
-
-Additionally to nodes that explictly configured to be adjusted, any nodes that end with `.TEMPLATE` will be moved to the same name without `.TEMPLATE` (e.g. `/etc/path/to/configfile/com.example.MyService.config.TEMPLATE` will be moved to `/etc/path/to/configfile/com.example.MyService.config` with the values replaced). This can be useful to avoid a "double-save" (first one on package installation itself, second one on install hook phase `INSTALLED`). To avoid that a configuration is deleted upon regular package installation, the target node (without `.TEMPLATE`) has to be excluded via exclude rule of filter statement.
 
 ## Variable Value Sources
 
@@ -70,7 +70,7 @@ Also, for this source to work the zookeeper jar has to be put in crx-quickstart/
 Will use system properties to set variables. Mostly useful for manual intervention, hence first source in default setting of `applySystemEnvSources`.
 
 
-# Using The Hook in a Package
+# Using The Install Hook in a Package
 Ensure the hook ins copied into the package:
 
 ```
@@ -88,9 +88,9 @@ Ensure the hook ins copied into the package:
                 <configuration>
                     <artifactItems>
                         <artifactItem>
-                            <groupId>biz.netcentric.aem</groupId>
+                            <groupId>biz.netcentric.aem.sysenvtools</groupId>
                             <artifactId>apply-system-env-install-hook</artifactId>
-                            <version>1.1.0</version>
+                            <version>1.2.0</version>
                         </artifactItem>
                     </artifactItems>
                     <outputDirectory>${project.build.directory}/vault-work/META-INF/vault/hooks</outputDirectory>
@@ -127,4 +127,21 @@ Configure it via vault package properties:
             <targetURL>http://${crx.host}:${crx.port}/crx/packmgr/service.jsp</targetURL>
         </configuration>
     </plugin>
-````
+```
+# Automatically update changed configuration values in AEM
+When updating configuration values, normally they only become active upon **manual or automatically triggered re-installation** of configuration package that contains the `apply-system-env-install-hook`. 
+
+However, when using the sources `ZooKeeper` or `JCR` it is possible to automatically reinstall the package containing the install hook.
+
+## Install bundle system-env-change-listener 
+
+Install the bundle `system-env-change-listener-x.x.x.jar` to AEM. The easiest way to do this is to drop it in `crx-quickstart/install`.
+
+## Ensure the bundle system-env-change-listener may install packages
+
+Create a service user (e.g. `sysenv-package-installer`) with permissions to install packages and create a user mapping as follows:
+`org.apache.sling.serviceusermapping.impl.ServiceUserMapperImpl.amended-sysenv-listener.config`
+
+```
+user.mapping=["biz.netcentric.aem.sysenvtools.system-env-change-listener\=sysenv-package-installer"]
+```

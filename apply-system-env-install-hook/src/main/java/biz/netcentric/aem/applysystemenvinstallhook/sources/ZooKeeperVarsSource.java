@@ -18,6 +18,8 @@ import org.slf4j.LoggerFactory;
 
 import biz.netcentric.aem.applysystemenvinstallhook.InstallHookLogger;
 import biz.netcentric.aem.applysystemenvinstallhook.VariablesSource;
+import biz.netcentric.aem.applysystemenvinstallhook.zookeeper.ZooKeeperConfig;
+import biz.netcentric.aem.applysystemenvinstallhook.zookeeper.ZooKeeperLoader;
 
 /** Loads the env from ZooKeeper. The System Properties -Dapplysysenv.zookeeper.hosts and -Dapplysysenv.zookeeper.path have to be set for
  * this to work. */
@@ -26,11 +28,7 @@ public class ZooKeeperVarsSource extends VariablesSource {
 
     public static final String NAME = "ZooKeeper";
 
-    public static final String SYS_PROP_ZOOKEEPER_HOSTS = "applysysenv.zookeeper.hosts";
-    public static final String SYS_PROP_ZOOKEEPER_PATH = "applysysenv.zookeeper.path";
-    public static final String SYS_PROP_OVERRIDE_SUFFIX = "applysysenv.zookeeper.overrideSuffix";
-
-    private String overrideSuffix = System.getProperty(SYS_PROP_OVERRIDE_SUFFIX);
+    private ZooKeeperConfig config = new ZooKeeperConfig();
 
     private InstallHookLogger logger;
 
@@ -38,19 +36,18 @@ public class ZooKeeperVarsSource extends VariablesSource {
         super(NAME, new HashMap<String, String>());
         this.logger = logger;
 
-        String zooKeeperHosts = System.getProperty(SYS_PROP_ZOOKEEPER_HOSTS);
-        String zooKeeperPath = System.getProperty(SYS_PROP_ZOOKEEPER_PATH);
 
-        if (StringUtils.isBlank(zooKeeperHosts) || StringUtils.isBlank(zooKeeperPath)) {
-            logger.log(LOG, "Missing system properties " + SYS_PROP_ZOOKEEPER_HOSTS + " and " + SYS_PROP_ZOOKEEPER_PATH
+        if (!config.isValid()) {
+            logger.log(LOG, "Missing system properties " + ZooKeeperConfig.SYS_PROP_ZOOKEEPER_HOSTS + " and "
+                    + ZooKeeperConfig.SYS_PROP_ZOOKEEPER_PATH
                     + " - not applying any properties from ZooKeeper");
             return;
         }
 
         try {
             long startTime = System.currentTimeMillis();
-            logger.log(LOG, "Connecting to ZooKeeper at " + zooKeeperHosts + " ...");
-            byte[] data = new ZooKeeperVarsSourceLoader().loadData(zooKeeperHosts, zooKeeperPath);
+            logger.log(LOG, "Connecting to ZooKeeper at " + config.getZooKeeperHosts() + " ...");
+            byte[] data = new ZooKeeperLoader().loadData(config);
 
             Properties properties = new Properties();
             properties.load(new ByteArrayInputStream(data));
@@ -59,23 +56,25 @@ public class ZooKeeperVarsSource extends VariablesSource {
             for (Object var : properties.keySet()) {
                 String key = String.valueOf(var);
                 String value = properties.getProperty(key);
-                if (key.endsWith("@" + overrideSuffix)) {
+                if (key.endsWith("@" + config.getOverrideSuffix())) {
                     countOverride++;
                 }
                 variables.put(key, value);
             }
 
-            String overrideSuffixSummery = StringUtils.isNotBlank(overrideSuffix)
-                    ? "(" + countOverride + " with suffix '" + overrideSuffix + "') " : "";
+            String overrideSuffixSummery = StringUtils.isNotBlank(config.getOverrideSuffix())
+                    ? "(" + countOverride + " with suffix '" + config.getOverrideSuffix() + "') " : "";
 
             logger.log(LOG,
-                    "Loaded " + properties.size() + " properties " + overrideSuffixSummery + "from ZooKeeper at " + zooKeeperPath + " in "
+                    "Loaded " + properties.size() + " properties " + overrideSuffixSummery + "from ZooKeeper at "
+                            + config.getZooKeeperPath() + " in "
                     + (System.currentTimeMillis() - startTime) + "ms");
 
         } catch (NoClassDefFoundError e) {
             logger.log("Could not find ZooKeeper classes (put the zookeeper jar in crx-quickstart/install) " + e);
         } catch (Exception e) {
-            logger.logError(LOG, "Could not load variables from Zookeeper " + zooKeeperHosts + zooKeeperPath + ": " + e, e);
+            logger.logError(LOG,
+                    "Could not load variables from Zookeeper " + config.getConnectStr() + ": " + e, e);
         }
 
     }
@@ -84,9 +83,10 @@ public class ZooKeeperVarsSource extends VariablesSource {
     @Override
     public NamedValue get(String varName) {
 
-        String overrideKey = varName + "@" + overrideSuffix;
+        String overrideKey = varName + "@" + config.getOverrideSuffix();
         if (variables.containsKey(overrideKey)) {
-            logger.log(LOG, "Using key '" + overrideKey + "' as system property '-D" + SYS_PROP_OVERRIDE_SUFFIX + "=" + overrideSuffix
+            logger.log(LOG, "Using key '" + overrideKey + "' as system property '-D" + ZooKeeperConfig.SYS_PROP_OVERRIDE_SUFFIX + "="
+                    + config.getOverrideSuffix()
                     + "' is set.");
             return super.get(overrideKey);
         } else {

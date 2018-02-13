@@ -9,7 +9,9 @@
 package biz.netcentric.aem.applysystemenvinstallhook;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -17,14 +19,25 @@ import biz.netcentric.aem.applysystemenvinstallhook.VariablesSource.NamedValue;
 
 public class VariablesMerger {
 
-    private int countVarsReplaced = 0;
-    private int countVarsDefaultUsed = 0;
-    private int countVarsNotFound = 0;
+    private static final String DEFAULT_KEY = "default";
+    private static final String NOTFOUND_KEY = "not found";
+
+    private Map<String, Integer> counts = new LinkedHashMap<String, Integer>();
 
     private final InstallHookLogger logger;
 
     public VariablesMerger(InstallHookLogger logger) {
         this.logger = logger;
+
+        // ensure special keys are set
+        counts.put(DEFAULT_KEY, 0);
+        counts.put(NOTFOUND_KEY, 0);
+    }
+
+    private void incrementCount(String key) {
+        Integer currentCountIntObj = counts.get(key);
+        int count = currentCountIntObj!=null? currentCountIntObj : 0;
+        counts.put(key, ++count);
     }
 
     List<EnvVarDeclaration> getEnvVarDeclarations(String text) {
@@ -51,19 +64,19 @@ public class VariablesMerger {
             
             if (entry != null) {
                 valueToBeUsed = String.valueOf(entry.getValue());
-                countVarsReplaced++;
+                incrementCount(entry.getSourceName());
                 action = "replaced from " + entry.getSourceName();
             } else {
                 String effectiveDefaultVal;
                 if (envVar.defaultVal != null) {
                     effectiveDefaultVal = envVar.defaultVal;
-                    countVarsDefaultUsed++;
+                    incrementCount(DEFAULT_KEY);
                     action = "default in package";
                 } else {
                     // leave exactly what we matched as default if no default is given
                     effectiveDefaultVal = matcher.group(0);
-                    countVarsNotFound++;
-                    action = "var not found, no default provided!";
+                    incrementCount(NOTFOUND_KEY);
+                    action = "var not found (no default provided)";
                 }
                 valueToBeUsed = effectiveDefaultVal;
             }
@@ -75,16 +88,27 @@ public class VariablesMerger {
         return result.toString();
     }
 
-    public int getCountVarsReplaced() {
-        return countVarsReplaced;
-    }
+    public String getReplacementSummary() {
+        int total = 0;
+        StringBuilder sb = new StringBuilder();
+        for(String key: counts.keySet()) {
+            if (DEFAULT_KEY.equals(key) || NOTFOUND_KEY.equals(key)) {
+                continue;
+            }
+            int count = counts.get(key);
+            total += count;
+            sb.append("Replacement count for '" + key + "': " + count + "\n");
+        }
+        int defaultUsedCount = counts.get(DEFAULT_KEY);
+        total += defaultUsedCount;
+        sb.append("Count default value used: " + defaultUsedCount + "\n");
+        sb.append("Total variables replaced: " + total);
+        int notFoundCount = counts.get(NOTFOUND_KEY);
+        if (notFoundCount > 0) {
+            sb.append("\nWARN: No value found for variable and no default given: " + notFoundCount);
+        }
 
-    public int getCountVarsDefaultUsed() {
-        return countVarsDefaultUsed;
-    }
-
-    public int getCountVarsNotFound() {
-        return countVarsNotFound;
+        return sb.toString();
     }
 
 
