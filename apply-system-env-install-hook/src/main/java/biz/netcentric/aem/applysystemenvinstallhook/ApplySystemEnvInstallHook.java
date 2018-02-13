@@ -62,6 +62,9 @@ public class ApplySystemEnvInstallHook implements InstallHook {
 
     public static final String TEMPLATE_SUFFIX = ".TEMPLATE";
 
+    private static final String PACKAGE_ROOT_PATH = "/etc/packages";
+    private static final String PACKAGE_PROP_PREFIX = "envSpecificPackage_";
+
     private InstallHookLogger logger = new InstallHookLogger();
     private VariablesMerger variablesMerger = new VariablesMerger(logger);
     private static VariablesSource variablesSource = null;
@@ -180,13 +183,10 @@ public class ApplySystemEnvInstallHook implements InstallHook {
                     
                 }
 
-                logger.log("Values replaced: " + variablesMerger.getCountVarsReplaced());
-                if (variablesMerger.getCountVarsDefaultUsed() > 0) {
-                    logger.log("Default values used: " + variablesMerger.getCountVarsDefaultUsed());
-                }
-                if (variablesMerger.getCountVarsNotFound() > 0) {
-                    logger.log("WARN: No env variable found for var and no default given: " + variablesMerger.getCountVarsNotFound());
-                }
+                logger.log("\n" + variablesMerger.getReplacementSummary());
+
+                savePackageLocation(session, vaultPackage);
+
                 session.save();
                 logger.log("Saved session. ");
 
@@ -197,6 +197,24 @@ public class ApplySystemEnvInstallHook implements InstallHook {
         } catch (RepositoryException | IOException e) {
             throw new PackageException("Could not execute install hook to apply env vars: " + e, e);
         }
+    }
+
+    private void savePackageLocation(Session session, VaultPackage vaultPackage) {
+        LOG.debug("Saving information that this package contains env-specific values and the install hook "
+                + "in order to allow listeners to reinstall it");
+        try {
+            Node node = session.getNode(PACKAGE_ROOT_PATH);
+            String group = vaultPackage.getProperty("group");
+            String name = vaultPackage.getProperty("name");
+            // using a key that will make sure that packages with same group/name but different version are only reinstalled once
+            String packageKey = PACKAGE_PROP_PREFIX
+                    + group.replaceAll("[^A-Za-z0-9]", "")
+                    + "_" + name.replaceAll("[^A-Za-z0-9]", "");
+            node.setProperty(packageKey, vaultPackage.getId().toString());
+        } catch (Exception e) {
+            LOG.info("Could not save package location of " + vaultPackage.getId() + ": " + e, e);
+        }
+
     }
 
     private VariablesSource getVariablesSource(InstallContext context) {
@@ -217,7 +235,7 @@ public class ApplySystemEnvInstallHook implements InstallHook {
 
     // not using workspace.copy() because that method saves immediately
     private Node copy(Node sourceNode, String targetPath) throws RepositoryException {
-        LOG.info("Copy {} to {}", sourceNode, targetPath);
+        LOG.trace("Copy {} to {}", sourceNode, targetPath);
         Node targetNode = JcrUtils.getOrCreateByPath(targetPath, sourceNode.getPrimaryNodeType().getName(), sourceNode.getSession());
         PropertyIterator propertiesIt = sourceNode.getProperties();
         while(propertiesIt.hasNext()) {
@@ -230,7 +248,7 @@ public class ApplySystemEnvInstallHook implements InstallHook {
             } else {
                 targetNode.setProperty(sourceProp.getName(), sourceProp.getValue(), sourceProp.getType());
             }
-            LOG.debug("Copied {} / {} to {}", sourceProp.getName(), sourceProp.getType(), targetNode);
+            LOG.trace("Copied {} / {} to {}", sourceProp.getName(), sourceProp.getType(), targetNode);
 
         }
         NodeIterator nodesIt = sourceNode.getNodes();
