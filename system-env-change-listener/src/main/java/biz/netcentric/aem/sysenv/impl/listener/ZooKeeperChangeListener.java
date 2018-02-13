@@ -8,96 +8,48 @@
  */
 package biz.netcentric.aem.sysenv.impl.listener;
 
-import java.util.Map;
-import java.util.concurrent.CountDownLatch;
-
 import org.apache.felix.scr.annotations.Activate;
 import org.apache.felix.scr.annotations.Component;
 import org.apache.felix.scr.annotations.Deactivate;
 import org.apache.felix.scr.annotations.Reference;
 import org.apache.zookeeper.WatchedEvent;
 import org.apache.zookeeper.Watcher;
-import org.apache.zookeeper.Watcher.Event.KeeperState;
-import org.apache.zookeeper.ZooKeeper;
-import org.apache.zookeeper.data.Stat;
 import org.osgi.framework.BundleContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import biz.netcentric.aem.applysystemenvinstallhook.zookeeper.ZooKeeperConfig;
+import biz.netcentric.aem.applysystemenvinstallhook.zookeeper.ZooKeeperLoader;
 
 @Component(metatype = true, immediate = true, label = "System Env ZooKeeper Listener", description = "Listens for system env changes from zoo keeper if configured and automatically applies them by installing the package.")
 public class ZooKeeperChangeListener implements Watcher {
     private static final Logger LOG = LoggerFactory.getLogger(ZooKeeperChangeListener.class);
 
-    public static final String SYS_PROP_ZOOKEEPER_HOSTS = "applysysenv.zookeeper.hosts";
-    public static final String SYS_PROP_ZOOKEEPER_PATH = "applysysenv.zookeeper.path";
-
-    private ZooKeeper zk = null;
-
-    private String zooKeeperHosts;
-    private String zooKeeperPath;
-
     @Reference
     PackageReinstaller packageReinstaller;
 
+    private ZooKeeperLoader loader = new ZooKeeperLoader();
+    private ZooKeeperConfig config = new ZooKeeperConfig();
+
     @Activate
-    public void activate(BundleContext bundleContext, @SuppressWarnings("rawtypes") final Map properties)
-            throws Exception {
-
-        zooKeeperHosts = System.getProperty(SYS_PROP_ZOOKEEPER_HOSTS);
-        zooKeeperPath = System.getProperty(SYS_PROP_ZOOKEEPER_PATH);
-
-        try {
-            zk = connect(zooKeeperHosts);
-            getDataAndSetWatcher(zooKeeperHosts, zooKeeperPath);
-            LOG.info("Listening for ZooKeeper changes at {}{}", zooKeeperHosts, zooKeeperPath);
-        } catch (Exception e) {
-            LOG.warn("Could not connect to ZooKeeper at " + zooKeeperHosts + ": " + e, e);
-            LOG.warn("No updates will be received from ZooKeeper");
-        }
-
+    public void activate(BundleContext bundleContext) {
+        setupWatcher();
     }
 
     @Deactivate
     public void deactivate() {
-        if (zk != null) {
-            try {
-                zk.close();
-                LOG.info("Stopped listening for ZooKeeper changes at {}{}", zooKeeperHosts, zooKeeperPath);
-            } catch (Exception e) {
-                LOG.warn("Could not close ZooKeeper Session: " + e, e);
-            }
-        }
+        loader.closeSession();
+        loader = null;
+        LOG.info("Stopped listening for ZooKeeper changes at {}", config.getConnectStr());
     }
 
-    public byte[] getDataAndSetWatcher(String zooKeeperHosts, String zooKeeperPath) {
-
-        byte[] data = new byte[0];
-
+    private void setupWatcher() {
         try {
-            Stat exists = zk.exists(zooKeeperPath, false);
-            data = zk.getData(zooKeeperPath, this, exists);
-
-            LOG.debug("Received data from ZooKeeper:\n" + new String(data));
-
+            loader.loadData(config, this);
         } catch (Exception e) {
-            LOG.warn("Could not get data from ZooKeeper at " + zooKeeperHosts + ": " + e, e);
+            LOG.warn("Could not load data from ZooKeeper at " + config.getConnectStr() + ": " + e, e);
             LOG.warn("No more updates will be received from ZooKeeper");
         }
-
-        return data;
-    }
-
-    private ZooKeeper connect(String host) throws Exception {
-        final CountDownLatch connSignal = new CountDownLatch(0);
-        ZooKeeper zk = new ZooKeeper(host, 10000, new Watcher() {
-            public void process(WatchedEvent event) {
-                if (event.getState() == KeeperState.SyncConnected) {
-                    connSignal.countDown();
-                }
-            }
-        }, true);
-        connSignal.await();
-        return zk;
     }
 
     @Override
@@ -118,7 +70,7 @@ public class ZooKeeperChangeListener implements Watcher {
         packageReinstaller.installEnvSpecificPackages();
 
         // set watcher again
-        getDataAndSetWatcher(zooKeeperHosts, zooKeeperPath);
+        setupWatcher();
     }
 
 }

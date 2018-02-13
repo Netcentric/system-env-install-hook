@@ -21,6 +21,11 @@
             <plugin>
               <groupId>org.apache.felix</groupId>
               <artifactId>maven-bundle-plugin</artifactId>
+              <configuration>
+                  <instructions>
+                    <Embed-Dependency>apply-system-env-install-hook</Embed-Dependency>
+                  </instructions>
+              </configuration>
             </plugin>
             <plugin>
                 <groupId>org.apache.felix</groupId>
@@ -38,6 +43,13 @@
     </build>
 
     <dependencies>
+        <dependency>
+            <groupId>biz.netcentric.aem.sysenvtools</groupId>
+            <artifactId>apply-system-env-install-hook</artifactId>
+            <version>${project.version}</version>
+            <scope>compile</scope>
+        </dependency> 
+
         <dependency>
             <groupId>org.apache.jackrabbit.vault</groupId>
             <artifactId>org.apache.jackrabbit.vault</artifactId>

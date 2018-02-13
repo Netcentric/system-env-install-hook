@@ -235,7 +235,7 @@ public class ApplySystemEnvInstallHook implements InstallHook {
 
     // not using workspace.copy() because that method saves immediately
     private Node copy(Node sourceNode, String targetPath) throws RepositoryException {
-        LOG.info("Copy {} to {}", sourceNode, targetPath);
+        LOG.trace("Copy {} to {}", sourceNode, targetPath);
         Node targetNode = JcrUtils.getOrCreateByPath(targetPath, sourceNode.getPrimaryNodeType().getName(), sourceNode.getSession());
         PropertyIterator propertiesIt = sourceNode.getProperties();
         while(propertiesIt.hasNext()) {
@@ -248,7 +248,7 @@ public class ApplySystemEnvInstallHook implements InstallHook {
             } else {
                 targetNode.setProperty(sourceProp.getName(), sourceProp.getValue(), sourceProp.getType());
             }
-            LOG.debug("Copied {} / {} to {}", sourceProp.getName(), sourceProp.getType(), targetNode);
+            LOG.trace("Copied {} / {} to {}", sourceProp.getName(), sourceProp.getType(), targetNode);
 
         }
         NodeIterator nodesIt = sourceNode.getNodes();
