@@ -45,6 +45,7 @@ public class ZooKeeperChangeListener implements Watcher {
 
     private void setupWatcher() {
         try {
+            LOG.info("Listening for ZooKeeper changes at {}", config.getConnectStr());
             loader.loadData(config, this);
         } catch (Exception e) {
             LOG.warn("Could not load data from ZooKeeper at " + config.getConnectStr() + ": " + e, e);
