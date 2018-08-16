@@ -79,7 +79,13 @@ public class ApplySystemEnvInstallHook implements InstallHook {
             VaultPackage vaultPackage = context.getPackage();
             WorkspaceFilter filter = vaultPackage.getMetaInf().getFilter();
 
+            List<String> jcrPathsToBeAdjusted = new ArrayList<String>();
+            String applyEnvVarsForPaths = vaultPackage.getProperties().getProperty(PROP_APPLY_SYSTEM_ENV_FOR_PATHS);
+            LOG.debug("Property applyEnvVarsForPaths from package={}", applyEnvVarsForPaths);
 
+            if (StringUtils.isNotBlank(applyEnvVarsForPaths)) {
+                jcrPathsToBeAdjusted.addAll(Arrays.asList(applyEnvVarsForPaths.trim().split("[\\s*,]+")));
+            }
 
             switch (context.getPhase()) {
             case PREPARE:
@@ -96,7 +102,7 @@ public class ApplySystemEnvInstallHook implements InstallHook {
                             + " checking if all env vars are set due to package property failForMissingEnvVar=true");
 
                     Archive archive = vaultPackage.getArchive();
-                    boolean allVariablesFoundInEnv = findMissingEnvVarInPackageEntry(archive, "/", archive.getJcrRoot(), options);
+                    boolean allVariablesFoundInEnv = findMissingEnvVarInPackageEntry(archive, "/", archive.getJcrRoot(), options, jcrPathsToBeAdjusted);
                     if (!allVariablesFoundInEnv) {
                         String errMsg = "Aborting installation of package " + vaultPackage.getId() + " due to missing env variables";
                         logger.log(errMsg);
@@ -113,20 +119,11 @@ public class ApplySystemEnvInstallHook implements InstallHook {
                     throw new IllegalStateException(msg);
                 }
 
-                List<String> jcrPathsToBeAdjusted = new ArrayList<String>();
-
-                String applyEnvVarsForPaths = vaultPackage.getProperties().getProperty(PROP_APPLY_SYSTEM_ENV_FOR_PATHS);
-                LOG.debug("Property applyEnvVarsForPaths from package={}", applyEnvVarsForPaths);
-
-                if (StringUtils.isNotBlank(applyEnvVarsForPaths)) {
-                    jcrPathsToBeAdjusted.addAll(Arrays.asList(applyEnvVarsForPaths.trim().split("[\\s*,]+")));
-                }
-
                 collectTemplateNodes(vaultPackage, session, jcrPathsToBeAdjusted);
 
                 if (jcrPathsToBeAdjusted.isEmpty()) {
                     logger.log("Install Hook " + getClass().getName()
-                            + " was configured but package property 'applyEnvVarsForPaths' was left blank and no .TEMPLATE nodes were configured");
+                            + " was configured but package property 'applyEnvVarsForPaths' was left blank and no .TEMPLATE nodes were found in package. No action taken.");
                     return;
                 }
 
@@ -365,14 +362,14 @@ public class ApplySystemEnvInstallHook implements InstallHook {
         return !covered;
     }
 
-    private boolean findMissingEnvVarInPackageEntry(Archive archive, String parentPath, Entry entry, ImportOptions options) {
+    private boolean findMissingEnvVarInPackageEntry(Archive archive, String parentPath, Entry entry, ImportOptions options, List<String> jcrPathsToBeAdjusted) {
 
         String path = parentPath + "/" + entry.getName();
         boolean result = true;
-        if (!entry.isDirectory()) {
-
+        if (!entry.isDirectory() && 
+        		(isPathExplictlyMarkedForAdjustment(path, jcrPathsToBeAdjusted) || path.endsWith(TEMPLATE_SUFFIX))) {
+        	
             String fileContent = null;
-
             LOG.debug("Reading file {}", path);
             try {
                 InputStream input = archive.getInputSource(entry).getByteStream();
@@ -398,8 +395,7 @@ public class ApplySystemEnvInstallHook implements InstallHook {
                     }
                     NamedValue varEntry = variablesSource.get(envVar.name);
                     if (varEntry == null) {
-                        logger.log("Variable '" + envVar.name + "' is not found is used in file "
-                                + path
+                        logger.log("Variable '" + envVar.name + "' is not found but is used in file " + path
                                 + " without declaring a default and it could not be found in sources: " + variablesSource.getName());
                         result = false;
                     }
@@ -410,9 +406,21 @@ public class ApplySystemEnvInstallHook implements InstallHook {
 
         Collection<? extends Entry> children = entry.getChildren();
         for (Entry subEntry : children) {
-            result &= findMissingEnvVarInPackageEntry(archive, path, subEntry, options);
+            result &= findMissingEnvVarInPackageEntry(archive, path, subEntry, options, jcrPathsToBeAdjusted);
         }
 
         return result;
     }
+    
+    private boolean isPathExplictlyMarkedForAdjustment(String currentPath, List<String> jcrPathsToBeAdjusted) {
+		String currentPathNormalised = currentPath.replaceFirst("^//jcr_root", "").replaceFirst("/.content.xml$", "").replaceFirst(".xml$", "");
+    	for (String jcrPathToBeAdjusted : jcrPathsToBeAdjusted) {
+    		String pureJcrPathToBeAdjusted = StringUtils.substringBefore(jcrPathToBeAdjusted, "@");
+    		if(currentPathNormalised.startsWith(pureJcrPathToBeAdjusted)) {
+    			return true;
+    		}
+		}
+    	return false;
+    }
+    
 }

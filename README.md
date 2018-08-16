@@ -2,7 +2,11 @@ Apply Env Install Hook for AEM/CRX
 ================================================
 
 **DISCLAIMER:**
-This hook should be used sparsely for very limited use cases only. Almost all OSGi configurations should be bound to runmodes as well-established mechanism to configure different environments. Also, in terms of maturity, this project is in incubator status while the approach is being validated. 
+This hook should be used sparsely for very limited use cases only. Almost all OSGi configurations should be bound to runmodes as well-established mechanism to configure different environments. However reasonable use cases are:
+
+* Replication Agents (if the set of potential target environments is unlimited/unknown)
+* OSGi configurations that differ per env (e.g. for a AEM communities user sync)
+* OSGi configurations or cloud services that contain sensible production passwords but still have to be deployed automatically (this can be mitigated by using the CryptoService and a well-defined master key, however if the master key leaks all passwords can be decrypted) 
 
 # Overview
 
