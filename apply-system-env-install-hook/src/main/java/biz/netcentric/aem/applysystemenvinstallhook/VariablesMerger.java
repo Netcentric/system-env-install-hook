@@ -21,6 +21,7 @@ public class VariablesMerger {
 
     private static final String DEFAULT_KEY = "default";
     private static final String NOTFOUND_KEY = "not found";
+    private static final String EXTENSION_CONFIG = ".config";
 
     private Map<String, Integer> counts = new LinkedHashMap<String, Integer>();
 
@@ -82,6 +83,12 @@ public class VariablesMerger {
             }
             logger.log(path.replace(ApplySystemEnvInstallHook.TEMPLATE_SUFFIX, "") + ": " + envVar.name + "=\"" + valueToBeUsed + "\" ("
                     + action + ")");
+
+            // escape characters '=', ' ', '\', '"' if target is `.config` file
+            if (path.endsWith(EXTENSION_CONFIG)) {
+                valueToBeUsed = valueToBeUsed.replaceAll("([\\\\=\\s\"])", "\\\\$1");
+            }
+
             matcher.appendReplacement(result, Matcher.quoteReplacement(valueToBeUsed));
         }
         matcher.appendTail(result);
