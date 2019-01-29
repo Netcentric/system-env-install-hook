@@ -31,12 +31,12 @@
     </developers>
 
     <scm>
-        <connection>scm:git:https://github.com/Netcentric/apply-system-env-install-hook.git</connection>
-        <developerConnection>scm:git:https://github.com/Netcentric/apply-system-env-install-hook.git</developerConnection>
+        <connection>scm:git:ssh://git@github.com/Netcentric/apply-system-env-install-hook.git</connection>
+        <developerConnection>scm:git:ssh://git@github.com/Netcentric/apply-system-env-install-hook.git</developerConnection>
         <url>https://github.com/Netcentric/apply-system-env-install-hook.git</url>
         <tag>HEAD</tag>
-    </scm>    
-    
+    </scm>
+
     <distributionManagement>
         <snapshotRepository>
             <id>ossrh</id>
