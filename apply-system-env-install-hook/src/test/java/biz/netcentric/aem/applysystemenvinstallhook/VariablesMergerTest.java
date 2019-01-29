@@ -46,6 +46,7 @@ public class VariablesMergerTest {
                         put("var1", "val1");
                         put("prefix.var2", "val2");
                         put("urlConfig", "http://www.example.com");
+                        put("var.special.chars", "val=3 with\"\\");
                     }
                 }) {
         };
@@ -53,6 +54,12 @@ public class VariablesMergerTest {
         
         assertEquals("no variables", variablesMerger.applyEnvVars("no variables", varSource, "/test"));
         assertEquals("val1", variablesMerger.applyEnvVars("${var1}", varSource, "/test"));
+
+        assertEquals("val\\=3\\ with\\\"\\\\", variablesMerger.applyEnvVars("${var.special.chars}", varSource, "/test.config"));
+        assertEquals("x-val\\=3\\ with\\\"\\\\-x", variablesMerger.applyEnvVars("x-${var.special.chars}-x", varSource, "/test.config"));
+
+        assertEquals("val=3 with\"\\", variablesMerger.applyEnvVars("${var.special.chars}", varSource, "/test.xml"));
+        assertEquals("x-val=3 with\"\\-x", variablesMerger.applyEnvVars("x-${var.special.chars}-x", varSource, "/test.xml"));
 
         assertEquals("x-val1-x", variablesMerger.applyEnvVars("x-${var1}-x", varSource, "/test"));
         assertEquals("x-val2-x", variablesMerger.applyEnvVars("x-${prefix.var2}-x", varSource, "/test"));
