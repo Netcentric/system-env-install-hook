@@ -20,11 +20,22 @@ Variables can be in form `${myVar}` or  `${myVar:defaultVal}` - if the var can n
 
 ### Nodes with suffix .TEMPLATE
 
-Additionally to nodes that explictly configured to be adjusted, any nodes that end with `.TEMPLATE` will be moved to the same name without `.TEMPLATE` (e.g. `/etc/path/to/configfile/com.example.MyService.config.TEMPLATE` will be moved to `/etc/path/to/configfile/com.example.MyService.config` with the values replaced). This can be useful to avoid a "double-save" (first one on package installation itself, second one on install hook phase `INSTALLED`). To avoid that a configuration is deleted upon regular package installation, the target node (without `.TEMPLATE`) has to be excluded via exclude rule of filter statement.
+Additionally to nodes that explictly configured to be adjusted, any nodes that end with `.TEMPLATE` will be copied to the same name without `.TEMPLATE` (e.g. `/etc/path/to/configfile/com.example.MyService.config.TEMPLATE` will be copied to `/etc/path/to/configfile/com.example.MyService.config` with the values replaced). To avoid that a configuration is deleted upon regular package installation, the target node (without `.TEMPLATE`) has to be excluded via exclude rule of filter statement. 
+
+Example:
+
+* Node to be added: `/etc/replication/agents.author/publish`
+* Node contained in the package: `/etc/replication/agents.author/publish/jcr:content.TEMPLATE` (don't include `/etc/replication/agents.author/publish/jcr:content`!)
+* Filter rule with exclude (to ensure it is not deleted because it's not in package): 
+```
+/etc/replication/agents.author/publish
+  \- exclude /etc/replication/agents.author/publish/jcr:content
+```
+
 
 ### Package Property applyEnvVarsForPaths
 
-The vault package property `applyEnvVarsForPaths` can be given to explicitly list properties and files where the replacement shall take place:
+Alternatively, the vault package property `applyEnvVarsForPaths` can be given to explicitly list properties and files where the replacement shall take place (opposed to use the automatic `.TEMPLATE` mechanism described above):
 
 ```
 /etc/path/to/node/jcr:content@testValue,
@@ -32,7 +43,8 @@ The vault package property `applyEnvVarsForPaths` can be given to explicitly lis
 /etc/path/to/configfile/com.example.MyService.config
 ```
 
-Multiple values can be given separated by whitespace and/or comma.
+Multiple values can be given separated by whitespace and/or comma. This approach has the downside that nodes are "double-saved" (first one on package installation itself, second one on install hook phase `INSTALLED` with replaced parameters).
+
 
 ## Variable Value Sources
 
