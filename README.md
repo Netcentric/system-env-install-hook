@@ -144,6 +144,24 @@ Configure it via vault package properties:
         </configuration>
     </plugin>
 ```
+
+# Troubleshooting for OS environment variable replacement 
+
+The environment variables need to be set to the env of the AEM process (since the install hook runs there). To check on OS-level if the
+env was set correctly, the following command can be used:
+
+```
+sudo cat /proc/<pid>/environ | tr '\0' '\n' # if you know the pid
+sudo cat /proc/$(pgrep -f  quickstart.jar)/environ | tr '\0' '\n' # auto-query the pid 
+```
+
+Also, on AEM/JRE level the [Groovy Console](https://github.com/icfnext/aem-groovy-console) can be used to show the environment as the JRE gets to see it by running the following simple script:
+
+```
+System.getenv().each{ println it }
+return
+```
+
 # Automatically update changed configuration values in AEM
 When updating configuration values, normally they only become active upon **manual or automatically triggered re-installation** of configuration package that contains the `apply-system-env-install-hook`. 
 
