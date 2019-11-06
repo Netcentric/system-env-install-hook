@@ -5,8 +5,11 @@ Apply Env Install Hook for AEM/CRX
 This hook should be used sparsely for very limited use cases only. Almost all OSGi configurations should be bound to runmodes as well-established mechanism to configure different environments. However reasonable use cases are:
 
 * Replication Agents (if the set of potential target environments is unlimited/unknown)
+* Cloud Configurations with differing values (e.g. URLs) between different environments
 * OSGi configurations that differ per env (e.g. for a AEM communities user sync)
-* OSGi configurations or cloud services that contain sensible production passwords but still have to be deployed automatically (this can be mitigated by using the CryptoService and a well-defined master key, however if the master key leaks all passwords can be decrypted) 
+* Sensible production passwords (in OSGi configurations or cloud services) that have to be deployed automatically (this can be mitigated by using the CryptoService and a well-defined master key, however if the master key leaks all passwords can be decrypted) 
+
+For OSGi configurations, Felix recently introduced the configadmin plugin [interpolation](https://github.com/apache/felix/tree/trunk/configadmin-plugins/interpolation) that allows for env variables substitution on framework level, however there is not ootb platform solution to apply env variables to content.
 
 # Overview
 
