@@ -36,9 +36,9 @@ Example:
 ```
 
 
-### Package Property applyEnvVarsForPaths
+### Package Property applySystemEnvForPaths
 
-Alternatively, the vault package property `applyEnvVarsForPaths` can be given to explicitly list properties and files where the replacement shall take place (opposed to use the automatic `.TEMPLATE` mechanism described above):
+Alternatively, the vault package property `applySystemEnvForPaths` can be given to explicitly list properties and files where the replacement shall take place (opposed to use the automatic `.TEMPLATE` mechanism described above):
 
 ```
 /etc/path/to/node/jcr:content@testValue,
@@ -135,11 +135,11 @@ Configure it via vault package properties:
             <properties>
                 <applySystemEnvSources>SystemProperties,ZooKeeper,OsEnvVars</applySystemEnvSources>
                 <!-- paths to adjust, can be left out if '.TEMPLATE' paths are used -->
-                <applyEnvVarsForPaths>
+                <applySystemEnvForPaths>
                     /etc/path/to/node/jcr:content@testValue,
                     /etc/path/to/node/jcr:content@testValueOther,
                     /etc/path/to/configfile/com.example.MyService.config
-                </applyEnvVarsForPaths>
+                </applySystemEnvForPaths>
                 <!-- default is false -->
                 <failForMissingEnvVars>true</failForMissingEnvVars> 
             </properties>                    
