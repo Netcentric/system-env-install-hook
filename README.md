@@ -17,6 +17,10 @@ Replaces variables in content packages for files (e.g. useful for OSGi configura
 
 Variables can be in form `${myVar}` or  `${myVar:defaultVal}` - if the var can not be found in any sources, for the first example `${myVar}` remains as is, for the second example `defaultVal` is used.
 
+# Supported AEM versions
+
+This bundle requires at least AEM 6.3.0
+
 # Configuration
 
 ## Including variables in packages

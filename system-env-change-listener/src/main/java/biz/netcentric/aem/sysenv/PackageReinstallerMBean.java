@@ -1,7 +1,7 @@
 package biz.netcentric.aem.sysenv;
 
 
-import org.apache.jackrabbit.oak.api.jmx.Description;
+import com.adobe.granite.jmx.annotation.Description;
 
 @Description("Environment Specific Package Reinstaller MBean")
 public interface PackageReinstallerMBean {

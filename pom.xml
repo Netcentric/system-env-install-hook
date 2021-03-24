@@ -206,15 +206,10 @@
                 <scope>provided</scope>
             </dependency>
             <dependency>
-                <artifactId>oak-core-spi</artifactId>
-                <version>1.38.0</version>
-                <groupId>org.apache.jackrabbit</groupId>
-                <scope>provided</scope>
-            </dependency>
-            <dependency>
-                <groupId>org.apache.jackrabbit</groupId>
-                <artifactId>oak-api</artifactId>
-                <version>1.38.0</version>
+                <groupId>com.adobe.aem</groupId>
+                <artifactId>uber-jar</artifactId>
+                <version>6.3.0</version>
+                <classifier>apis</classifier>
                 <scope>provided</scope>
             </dependency>
 

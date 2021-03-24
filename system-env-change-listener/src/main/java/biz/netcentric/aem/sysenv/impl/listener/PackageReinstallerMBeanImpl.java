@@ -14,7 +14,7 @@ import javax.management.NotCompliantMBeanException;
 import org.apache.felix.scr.annotations.Component;
 import org.apache.felix.scr.annotations.Reference;
 import org.apache.felix.scr.annotations.Service;
-import org.apache.jackrabbit.oak.commons.jmx.AnnotatedStandardMBean;
+import com.adobe.granite.jmx.annotation.AnnotatedStandardMBean;
 
 import biz.netcentric.aem.sysenv.PackageReinstallerMBean;
 
