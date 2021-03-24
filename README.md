@@ -17,10 +17,6 @@ Replaces variables in content packages for files (e.g. useful for OSGi configura
 
 Variables can be in form `${myVar}` or  `${myVar:defaultVal}` - if the var can not be found in any sources, for the first example `${myVar}` remains as is, for the second example `defaultVal` is used.
 
-# Supported AEM versions
-
-This bundle requires at least AEM 6.3.0
-
 # Configuration
 
 ## Including variables in packages
@@ -173,6 +169,8 @@ return
 When updating configuration values, normally they only become active upon **manual or automatically triggered re-installation** of configuration package that contains the `apply-system-env-install-hook`. 
 
 However, when using the sources `ZooKeeper` or `JCR` it is possible to automatically reinstall the package containing the install hook.
+
+This feature requires AEM 6.3.0 or higher
 
 ## Install bundle system-env-change-listener 
 
