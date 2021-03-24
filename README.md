@@ -9,7 +9,7 @@ This hook should be used sparsely for very limited use cases only. Almost all OS
 * OSGi configurations that differ per env (e.g. for a AEM communities user sync)
 * Sensitive production passwords (in OSGi configurations or cloud services) that have to be deployed automatically (this can be mitigated by using the CryptoService and a well-defined master key, however if the master key leaks all passwords can be decrypted) 
 
-For OSGi configurations, Felix recently introduced the configadmin plugin [interpolation](https://github.com/apache/felix/tree/trunk/configadmin-plugins/interpolation) that allows for env variables substitution on framework level, however there is no out-of-the-box platform solution to apply env variables to content.
+For OSGi configurations, Felix recently introduced the configadmin plugin [interpolation](https://github.com/apache/felix-dev/tree/master/configadmin-plugins/interpolation) that allows for env variables substitution on framework level, however there is no out-of-the-box platform solution to apply env variables to content.
 
 # Overview
 
