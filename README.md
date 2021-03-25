@@ -170,6 +170,8 @@ When updating configuration values, normally they only become active upon **manu
 
 However, when using the sources `ZooKeeper` or `JCR` it is possible to automatically reinstall the package containing the install hook.
 
+This feature requires AEM 6.3.0 or higher
+
 ## Install bundle system-env-change-listener 
 
 Install the bundle `system-env-change-listener-x.x.x.jar` to AEM. The easiest way to do this is to drop it in `crx-quickstart/install`.
