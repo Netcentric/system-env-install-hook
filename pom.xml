@@ -5,7 +5,7 @@
     <groupId>biz.netcentric.aem.sysenvtools</groupId>
     <artifactId>sys-env-tools</artifactId>
     <packaging>pom</packaging>
-    <version>1.2.3</version>
+    <version>1.2.4-SNAPSHOT</version>
 
     <name>System Env Tools</name>
     <description>
@@ -34,7 +34,7 @@
         <connection>scm:git:ssh://git@github.com/Netcentric/apply-system-env-install-hook.git</connection>
         <developerConnection>scm:git:ssh://git@github.com/Netcentric/apply-system-env-install-hook.git</developerConnection>
         <url>https://github.com/Netcentric/apply-system-env-install-hook.git</url>
-        <tag>1.2.3</tag>
+        <tag>HEAD</tag>
     </scm>
 
     <distributionManagement>

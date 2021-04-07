@@ -5,7 +5,7 @@
     <parent>
         <groupId>biz.netcentric.aem.sysenvtools</groupId>
         <artifactId>sys-env-tools</artifactId>
-        <version>1.2.3</version>
+        <version>1.2.4-SNAPSHOT</version>
     </parent>
 
     <artifactId>apply-system-env-install-hook</artifactId>
